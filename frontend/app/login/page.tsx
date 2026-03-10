@@ -1,0 +1,86 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+
+export default function LoginPage() {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const router = useRouter();
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+
+    try {
+      // 1. Send credentials to Django
+      const res = await fetch("http://localhost:8000/api/token/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+
+      if (!res.ok) {
+        throw new Error("Invalid credentials");
+      }
+
+      const data = await res.json();
+
+      // 2. Save the Token (Crucial!)
+      // In a real app, use httpOnly cookies. For learning, localStorage is fine.
+      localStorage.setItem("access_token", data.access);
+      localStorage.setItem("refresh_token", data.refresh);
+
+      // 3. Redirect to Home (Chat)
+      router.push("/");
+      
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  return (
+    <div className="flex h-screen items-center justify-center bg-black">
+      <div className="w-full max-w-sm p-8 rounded-2xl flex flex-col gap-6">
+        
+        <div className="flex justify-center mb-4">
+            {/* Bolt Logo */}
+            <img src="/assets/bolt-logo.png" alt="Bolt Logo" className="h-16 w-auto" />
+        </div>
+
+        <h2 className="text-3xl font-bold text-white mb-2 text-center">Sign in to Bolt</h2>
+        
+        {error && <div className="bg-[#f4212e]/10 text-[#f4212e] px-4 py-3 rounded-xl text-sm font-medium border border-[#f4212e]/20">{error}</div>}
+
+        <form onSubmit={handleLogin} className="flex flex-col gap-4">
+          <input
+            type="text"
+            placeholder="Username"
+            className="w-full bg-black text-white px-4 py-4 rounded-full border border-[#333639] focus:border-white focus:outline-none focus:ring-1 focus:ring-white placeholder-[#71767B] transition"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+          />
+          <input
+            type="password"
+            placeholder="Password"
+            className="w-full bg-black text-white px-4 py-4 rounded-full border border-[#333639] focus:border-white focus:outline-none focus:ring-1 focus:ring-white placeholder-[#71767B] transition"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+          <button
+            type="submit"
+            className="w-full bg-white text-black py-3.5 rounded-full font-bold text-[17px] hover:bg-[#D7DBDC] transition mt-2"
+          >
+            Sign In
+          </button>
+          
+        </form>
+        
+        <p className="text-[#71767B] text-sm mt-4 text-center">
+            Don't have an account? <a href="/signup" className="text-white hover:underline">Sign up</a>
+        </p>
+      </div>
+    </div>
+  );
+}
