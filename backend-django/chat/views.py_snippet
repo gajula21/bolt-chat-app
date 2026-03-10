@@ -1,0 +1,34 @@
+
+class RegisterView(APIView):
+    permission_classes = [] # Allow anyone to register
+
+    def post(self, request):
+        username = request.data.get("username")
+        password = request.data.get("password")
+        email = request.data.get("email", "")
+
+        if not username or not password:
+            return Response({"error": "Username and password are required"}, status=400)
+
+        if User.objects.filter(username=username).exists():
+            return Response({"error": "Username already taken"}, status=400)
+
+        user = User.objects.create_user(username=username, password=password, email=email)
+        
+        # Signal (create_user_profile) will automatically create UserProfile
+        
+        # Generate Tokens immediately for seamless login? 
+        # Or just return success and let frontend login?
+        # Let's return tokens to be nice.
+        from rest_framework_simplejwt.tokens import RefreshToken
+        refresh = RefreshToken.for_user(user)
+
+        return Response({
+            "status": "success",
+            "user_id": user.id,
+            "username": user.username,
+            "tokens": {
+                "refresh": str(refresh),
+                "access": str(refresh.access_token),
+            }
+        }, status=201)
