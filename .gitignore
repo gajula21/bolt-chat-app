@@ -46,3 +46,15 @@ logs/
 
 # Docker (optional ignores)
 docker-compose.override.yml
+
+# Media files
+backend-django/media/
+
+# TypeScript build info
+*.tsbuildinfo
+
+# Media files
+backend-django/media/
+
+# TypeScript build info
+*.tsbuildinfo

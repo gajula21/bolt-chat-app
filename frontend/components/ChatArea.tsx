@@ -70,25 +70,7 @@ export default function ChatArea({ chat, onlineUsers, myUserId }: ChatAreaProps)
     }
   }, [myUsername]);
 
-  // Real-time Profile Updates
-  useEffect(() => {
-    const handleProfileUpdate = (e: any) => {
-        const { user_id, profile } = e.detail;
-        if (chat && chat.participants.some((p: any) => p.id === user_id)) {
-             // In a real app we might update 'chat' state, but since 'chat' comes from props, 
-             // we rely on the parent or we can force a re-render/local update if we copied props to state.
-             // However, for the header avatar which is derived from 'chat.participants', we need 'chat' to update.
-             // Since 'ChatArea' receives 'chat' from 'page.tsx' -> 'activeChat', 
-             // we need to update 'activeChat' in 'page.tsx' OR 'Sidebar' (where conversations are).
-             // Actually, 'Home' passes 'activeChat'. We should update it there. 
-             // But for now, let's assuming 'Sidebar' updates 'conversations' and if we re-select it updates?
-             // No, 'activeChat' is state in 'Home'.
-             console.log("ChatArea received update for", user_id);
-        }
-    };
-    window.addEventListener("profile_updated", handleProfileUpdate);
-    return () => window.removeEventListener("profile_updated", handleProfileUpdate);
-  }, [chat]);
+
 
   // Mark Messages as Read
   const markAsRead = async () => {
@@ -118,7 +100,9 @@ export default function ChatArea({ chat, onlineUsers, myUserId }: ChatAreaProps)
         signal: controller.signal
     })
     .then(res => {
-      setMessages(res.data);
+      // Backend returns paginated response: { count, next, previous, results }
+      const fetchedMessages = res.data.results || res.data;
+      setMessages(fetchedMessages.filter((m: any) => !m._hidden));
       // Mark as read immediately when opening chat
       markAsRead();
     })
@@ -128,78 +112,103 @@ export default function ChatArea({ chat, onlineUsers, myUserId }: ChatAreaProps)
     });
 
     // Connect Message Socket
-    const ws = new WebSocket(`ws://localhost:8001/ws/${chat.id}/${myUserId}/`);
-    wsRef.current = ws;
-    
-    ws.onopen = () => console.log("Connected to Chat WS");
-    ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        // console.log("CreateArea WS Debug:", data); 
-        
-        // CASE 1: New Message Received
-        if (data.content) {
-            setMessages(prev => {
-                if (prev.some(m => m.id === data.id)) return prev;
-                return [...prev, data];
-            });
-            setTypingUsers(prev => {
-                const next = new Set(prev);
-                next.delete(data.sender.username);
-                return next;
-            });
-            if (data.sender.username !== myUsername) {
-              markAsRead();
-            }
-        }
-        
-        // CASE 2: Read Receipt Received
-        if (data.type === "read_receipt") {
-            const readerId = data.user_id;
-            setMessages(prev => prev.map(msg => {
-                if (!msg.read_by) msg.read_by = [];
-                if (msg.id <= data.last_message_id && !msg.read_by.includes(readerId)) {
-                     return { ...msg, read_by: [...msg.read_by, readerId] };
-                }
-                return msg;
-            }));
-        }
+    let ws: WebSocket | null = null;
+    let reconnectTimeout: ReturnType<typeof setTimeout>;
+    let reconnectAttempts = 0;
+    const maxReconnectDelay = 30000;
 
-        // CASE 3: Message Update (Edit)
-        if (data.type === "message_update") {
-             setMessages(prev => prev.map(msg => 
-                msg.id === data.message.id ? data.message : msg
-             ));
-        }
+    const connectChatWs = () => {
+        const token = localStorage.getItem("access_token");
+        if (!token) return;
 
-        // CASE 4: Typing Indicator
-        if (data.type === "typing") {
-            if (data.user_id !== myUserId) {
+        const wsUrl = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8001/ws";
+        ws = new WebSocket(`${wsUrl}/${chat.id}/${myUserId}/?token=${token}`);
+        wsRef.current = ws;
+        
+        ws.onopen = () => {
+            console.log("Connected to Chat WS");
+            reconnectAttempts = 0;
+        };
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            
+            // CASE 1: New Message Received
+            if (data.content) {
+                if (data._hidden) return; // Ignore hidden
+                setMessages(prev => {
+                    if (prev.some(m => m.id === data.id)) return prev;
+                    return [...prev, data];
+                });
                 setTypingUsers(prev => {
                     const next = new Set(prev);
-                    if (data.is_typing) {
-                        next.add(data.username);
-                    } else {
-                        next.delete(data.username);
-                    }
+                    next.delete(data.sender.username);
                     return next;
                 });
+                if (data.sender.username !== myUsername) {
+                  markAsRead();
+                }
             }
-        }
+            
+            // CASE 2: Read Receipt Received
+            if (data.type === "read_receipt") {
+                const readerId = data.user_id;
+                setMessages(prev => prev.map(msg => {
+                    if (!msg.read_by) msg.read_by = [];
+                    if (msg.id <= data.last_message_id && !msg.read_by.includes(readerId)) {
+                         return { ...msg, read_by: [...msg.read_by, readerId] };
+                    }
+                    return msg;
+                }));
+            }
 
-        // CASE 5: Message Deleted
-        if (data.type === "message_delete") {
-            setMessages(prev => prev.map(msg => 
-                msg.id === data.message_id 
-                ? { ...msg, content: "This message was deleted", is_deleted: true } 
-                : msg
-            ));
-        }
+            // CASE 3: Message Update (Edit)
+            if (data.type === "message_update") {
+                 setMessages(prev => prev.map(msg => 
+                    msg.id === data.message.id ? data.message : msg
+                 ));
+            }
+
+            // CASE 4: Typing Indicator
+            if (data.type === "typing") {
+                if (data.user_id !== myUserId) {
+                    setTypingUsers(prev => {
+                        const next = new Set(prev);
+                        if (data.is_typing) {
+                            next.add(data.username);
+                        } else {
+                            next.delete(data.username);
+                        }
+                        return next;
+                    });
+                }
+            }
+
+            // CASE 5: Message Deleted
+            if (data.type === "message_delete") {
+                setMessages(prev => prev.map(msg => 
+                    msg.id === data.message_id 
+                    ? { ...msg, content: "This message was deleted", is_deleted: true } 
+                    : msg
+                ));
+            }
+        };
+        ws.onclose = () => {
+            console.log("Disconnected Chat WS");
+            const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), maxReconnectDelay);
+            reconnectTimeout = setTimeout(connectChatWs, delay);
+            reconnectAttempts++;
+        };
     };
-    ws.onclose = () => console.log("Disconnected Chat WS");
+
+    connectChatWs();
 
     return () => {
         controller.abort();
-        ws.close();
+        clearTimeout(reconnectTimeout);
+        if (ws) {
+            ws.onclose = null; // Prevent reconnect on unmount
+            ws.close();
+        }
         wsRef.current = null;
     };
   }, [chat, myUserId, myUsername]); // Added myUsername dep to ensure markAsRead check works

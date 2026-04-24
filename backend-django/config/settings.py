@@ -21,12 +21,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-3#md-tnh7!)u13uk4=nb96vuga!^+helq50djsv9efpi)gky$-'
+SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-DEV-ONLY-change-before-any-deployment')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
 
 # Application definition
@@ -146,7 +146,9 @@ CORS_ALLOWED_ORIGINS = [
 ]
 
 # --- REDIS SETTINGS ---
-REDIS_URL = f"redis://{os.environ.get('REDIS_HOST', 'redis')}:{os.environ.get('REDIS_PORT', '6379')}/0"
+REDIS_HOST = os.environ.get('REDIS_HOST', 'redis')
+REDIS_PORT = int(os.environ.get('REDIS_PORT', '6379'))
+REDIS_URL = f"redis://{REDIS_HOST}:{REDIS_PORT}/0"
 
 # --- REST FRAMEWORK ---
 REST_FRAMEWORK = {

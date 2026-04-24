@@ -18,8 +18,6 @@ class UserSerializer(serializers.ModelSerializer):
 
 class MessageSerializer(serializers.ModelSerializer):
     sender = UserSerializer(read_only=True)
-    
-
     is_deleted = serializers.BooleanField(read_only=True)
     
     class Meta:
@@ -29,23 +27,24 @@ class MessageSerializer(serializers.ModelSerializer):
     def to_representation(self, instance):
         data = super().to_representation(instance)
         
-        # 1. "Delete for Everyone" check
+        # "Delete for Everyone" — replace content but keep object
         if instance.is_deleted:
             data['content'] = "This message was deleted"
             data['is_deleted'] = True
             
-        # 2. "Delete for Me" check
-        # We need the request context to know who "Me" is
+        # "Delete for Me" — mark as hidden so frontend can filter it out
+        # Queryset-level filtering in MessageListView is the primary mechanism;
+        # this is a safety net for future serializer reuse contexts.
         request = self.context.get('request')
-        if request and request.user:
+        if request and request.user and request.user.is_authenticated:
             if instance.deleted_by.filter(id=request.user.id).exists():
-                return None  # Or structure it so the frontend knows to hide it completely
+                data['_hidden'] = True
                 
         return data
 
 class ConversationSerializer(serializers.ModelSerializer):
     participants = UserSerializer(many=True, read_only=True)
-    admins = UserSerializer(many=True, read_only=True) # Explicitly serialize admins
+    admins = UserSerializer(many=True, read_only=True)
     other_user = serializers.SerializerMethodField()
     last_message = serializers.SerializerMethodField()
 
@@ -54,7 +53,7 @@ class ConversationSerializer(serializers.ModelSerializer):
         fields = ['id', 'is_group', 'name', 'avatar', 'participants', 'admins', 'other_user', 'last_message']
 
     def get_last_message(self, obj):
-        last_msg = obj.messages.order_by('-created_at').first()
+        last_msg = obj.messages.filter(is_deleted=False).order_by('-created_at').first()
         if last_msg:
             return {
                 "content": last_msg.content,
@@ -63,11 +62,9 @@ class ConversationSerializer(serializers.ModelSerializer):
         return None
 
     def get_other_user(self, obj):
-        # If it's a group, we don't need a single "other user"
         if obj.is_group:
             return None
             
-        # If it's a DM, find the participant who is NOT the current user
         request = self.context.get('request')
         if request and request.user:
             other_participant = obj.participants.exclude(id=request.user.id).first()

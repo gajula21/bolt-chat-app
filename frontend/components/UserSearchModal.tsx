@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import axios from "axios";
+import api from "@/lib/axios";
 import { X, Search, Check, Users, ArrowRight } from "lucide-react"; 
 import { getInitials, getColor } from "@/lib/utils"; 
 
@@ -28,10 +28,7 @@ export default function UserSearchModal({ isOpen, onClose, onChatCreated }: User
   useEffect(() => {
     const delayDebounceFn = setTimeout(async () => {
       if (query.trim().length > 0) {
-        const token = localStorage.getItem("access_token");
-        const res = await axios.get(`http://localhost:8000/api/users/search/?search=${query}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+        const res = await api.get(`/users/search/?search=${query}`);
         setResults(res.data);
       } else {
         setResults([]);
@@ -59,10 +56,7 @@ export default function UserSearchModal({ isOpen, onClose, onChatCreated }: User
   // Create Chat Function (Calls Django)
   const createChat = async (payload: any) => {
     try {
-      const token = localStorage.getItem("access_token");
-      await axios.post("http://localhost:8000/api/conversations/", payload, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await api.post("/conversations/", payload);
       onChatCreated(); // Refresh Sidebar
       onClose();       // Close Modal
       // Reset States
@@ -191,11 +185,9 @@ export default function UserSearchModal({ isOpen, onClose, onChatCreated }: User
                         {(status === 'none' || status === 'rejected') && (
                             <button 
                                 onClick={async () => {
-                                    const token = localStorage.getItem("access_token");
                                     try {
-                                        await axios.post("http://localhost:8000/api/users/request/send/", 
-                                            { user_id: user.id },
-                                            { headers: { Authorization: `Bearer ${token}` } }
+                                        await api.post("/users/request/send/", 
+                                            { user_id: user.id }
                                         );
                                         // Refresh search logic to update status (simple hack: clear and re-search or manual update)
                                         setResults(prev => prev.map(u => u.id === user.id ? { ...u, connection_status: 'pending_sent' } : u));

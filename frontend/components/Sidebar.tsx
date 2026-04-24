@@ -129,7 +129,7 @@ export default function Sidebar({ onSelectChat, selectedChatId, onlineUsers, myU
         window.removeEventListener("profile_updated", handleProfileUpdate);
         window.removeEventListener("group_updated", handleGroupUpdate);
     };
-  }, [router, currentUser]); // Added currentUser dependency safely
+  }, [router]); // Removed currentUser dependency to prevent infinite loops
 
   return (
     <div className="w-80 bg-black border-r border-[#2F3336] flex flex-col h-full">

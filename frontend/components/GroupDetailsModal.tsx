@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import axios from "axios";
+import api from "@/lib/axios";
 import { X, Search, Check, Shield, ShieldAlert, LogOut, Trash, UserPlus, Camera, Edit2 } from "lucide-react"; 
 import { getInitials, getColor } from "@/lib/utils"; 
 
@@ -49,9 +49,7 @@ export default function GroupDetailsModal({ isOpen, onClose, chat, onUpdate, myU
       if (view === "add_member" && query.trim().length > 0) {
         const token = localStorage.getItem("access_token");
         try {
-            const res = await axios.get(`http://localhost:8000/api/users/search/?search=${query}`, {
-            headers: { Authorization: `Bearer ${token}` }
-            });
+            const res = await api.get(`/users/search/?search=${query}`);
             // Filter out existing participants
             const existingIds = new Set(chat.participants.map((p: any) => p.id));
             setSearchResults(res.data.filter((u: User) => !existingIds.has(u.id)));
@@ -71,19 +69,16 @@ export default function GroupDetailsModal({ isOpen, onClose, chat, onUpdate, myU
             if (extraData.name) formData.append("name", extraData.name);
             if (avatarFile) formData.append("avatar", avatarFile);
 
-            await axios.put(`http://localhost:8000/api/conversations/${chat.id}/update/`, formData, {
-                headers: { 
-                    Authorization: `Bearer ${token}`,
-                    "Content-Type": "multipart/form-data"
-                }
+            await api.put(`/conversations/${chat.id}/update/`, formData, {
+                headers: { "Content-Type": "multipart/form-data" }
             });
             setIsEditingName(false);
             setAvatarFile(null); // Reset after save
         } else {
-            await axios.post(`http://localhost:8000/api/conversations/${chat.id}/action/`, 
-                { action, user_id: userId },
-                { headers: { Authorization: `Bearer ${token}` } }
-            );
+            const payload: any = { action, user_id: userId };
+            if (extraData?.user_ids) payload.user_ids = extraData.user_ids;
+            
+            await api.post(`/conversations/${chat.id}/action/`, payload);
         }
         onUpdate(); // Refresh Parent
         if (action === "leave") onClose();
@@ -99,9 +94,10 @@ export default function GroupDetailsModal({ isOpen, onClose, chat, onUpdate, myU
   };
 
   const handleAddSelected = async () => {
-      // Add all selected users
-      for (const user of selectedUsers) {
-          await handleAction("add_member", user.id);
+      // Add all selected users in a single batch request
+      const userIds = selectedUsers.map(u => u.id);
+      if (userIds.length > 0) {
+          await handleAction("add_member", undefined, { user_ids: userIds });
       }
   };
 

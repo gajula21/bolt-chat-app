@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
+import api from "@/lib/axios";
 import { X, Camera, Save, Loader2 } from "lucide-react";
 
 interface ProfileSettingsModalProps {
@@ -53,24 +54,13 @@ export default function ProfileSettingsModal({
     }
 
     try {
-        // Retrieve token from localStorage
-      const token = localStorage.getItem("access_token");
-      
-      const res = await fetch("http://localhost:8000/api/users/profile/update/", {
-        method: "PUT",
+      const res = await api.put("/users/profile/update/", formData, {
         headers: {
-          Authorization: `Bearer ${token}`,
+          "Content-Type": "multipart/form-data",
         },
-        body: formData,
       });
 
-      if (!res.ok) {
-        const errorText = await res.text();
-        console.error("Profile Update Error Details:", errorText);
-        throw new Error(errorText || "Failed to update profile");
-      }
-
-      const updatedUser = await res.json();
+      const updatedUser = res.data;
       onUpdate(updatedUser);
       onClose();
     } catch (error) {

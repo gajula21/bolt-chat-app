@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import axios from "axios";
+import api from "@/lib/axios";
 import { X, Search, Send, User, Users } from "lucide-react";
 import { getInitials } from "@/lib/utils";
 
@@ -22,10 +22,7 @@ export default function ForwardSelectionModal({ isOpen, onClose, messageContent,
   // Fetch recent chats on open
   useEffect(() => {
     if (isOpen) {
-      const token = localStorage.getItem("access_token");
-      axios.get("http://localhost:8000/api/conversations/", {
-        headers: { Authorization: `Bearer ${token}` }
-      })
+      api.get("/conversations/")
       .then(res => setRecentChats(res.data))
       .catch(err => console.error("Failed to fetch chats", err));
     }
@@ -35,12 +32,9 @@ export default function ForwardSelectionModal({ isOpen, onClose, messageContent,
   useEffect(() => {
     const delayDebounceFn = setTimeout(async () => {
       if (query.trim().length > 0) {
-        const token = localStorage.getItem("access_token");
         try {
             // Search Users
-            const res = await axios.get(`http://localhost:8000/api/users/search/?search=${query}`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            const res = await api.get(`/users/search/?search=${query}`);
             setSearchResults(res.data);
             // TODO: Also search groups if we had a group search endpoint? 
             // For now, rely on recentChats for groups or client-side filter of recentChats
@@ -62,14 +56,9 @@ export default function ForwardSelectionModal({ isOpen, onClose, messageContent,
   const handleSend = async () => {
       if (!messageContent || selectedChatIds.size === 0) return;
       setSending(true);
-      const token = localStorage.getItem("access_token");
-
       try {
           const promises = Array.from(selectedChatIds).map(chatId => 
-              axios.post(`http://localhost:8000/api/conversations/${chatId}/send/`, 
-                  { content: messageContent }, 
-                  { headers: { Authorization: `Bearer ${token}` } }
-              )
+              api.post(`/conversations/${chatId}/send/`, { content: messageContent })
           );
           
           await Promise.all(promises);
@@ -103,12 +92,8 @@ export default function ForwardSelectionModal({ isOpen, onClose, messageContent,
       }
 
       // If not found, we need to create/get DM.
-      const token = localStorage.getItem("access_token");
       try {
-          const res = await axios.post("http://localhost:8000/api/conversations/", 
-            { user_id: user.id },
-            { headers: { Authorization: `Bearer ${token}` } }
-          );
+          const res = await api.post("/conversations/", { user_id: user.id });
           // Add to recent chats and select
           setRecentChats(prev => [res.data, ...prev]);
           toggleSelection(res.data.id);
@@ -193,7 +178,7 @@ export default function ForwardSelectionModal({ isOpen, onClose, messageContent,
                     if (isGroup) {
                         name = item.name;
                         subtitle = "Group";
-                        avatar = null; // Group avatar if available
+                        avatar = item.avatar; // Use group avatar from response
                     } else {
                         const otherMode = item.participants.find((p: any) => p.id !== myUserId);
                         const otherUser = otherMode || item.participants[0]; // Fallback

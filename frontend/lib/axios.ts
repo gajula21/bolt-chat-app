@@ -1,8 +1,10 @@
 import axios from 'axios';
 
 // Create a custom Axios instance
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+
 const api = axios.create({
-    baseURL: 'http://localhost:8000/api', // Adjust if your API URL is different
+    baseURL: API_BASE_URL,
     headers: {
         'Content-Type': 'application/json',
     },
@@ -68,7 +70,7 @@ api.interceptors.response.use(
 
                 // Call the refresh endpoint
                 // Note: We use the *default* axios here to avoid infinite loops with our interceptors
-                const response = await axios.post('http://localhost:8000/api/token/refresh/', {
+                const response = await axios.post(`${API_BASE_URL}/token/refresh/`, {
                     refresh: refreshToken,
                 });
 
